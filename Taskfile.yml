@@ -85,7 +85,7 @@ tasks:
         - REGISTRY_USER
         - REGISTRY_PASSWORD
     vars:
-      IMAGE_NAME: ghcr.io/{{.GITHUB_REPOSITORY}}{{if ne .GITHUB_REF "tag"}}-testing{{end}}
+      IMAGE_NAME: ghcr.io/{{.GITHUB_REPOSITORY}}{{if not (hasPrefix "refs/tags/v" .GITHUB_REF)}}-testing{{end}}
       # remove /merge suffix from the branch name. This is a workaround for the GitHub workflow on PRs,
       # where the branch name is suffixed with /merge. Prepend pr- to the branch name on PRs.
       IMAGE_VERSION: '{{regexReplaceAll "(\\d+)/merge" .GITHUB_REF_NAME "pr-${1}"}}'
@@ -110,7 +110,7 @@ tasks:
         - GITHUB_REF
         - GITHUB_REF_NAME
     vars:
-      IMAGE_NAME: ghcr.io/{{.GITHUB_REPOSITORY}}{{if ne .GITHUB_REF "tag"}}-testing{{end}}
+      IMAGE_NAME: ghcr.io/{{.GITHUB_REPOSITORY}}{{if not (hasPrefix "refs/tags/v" .GITHUB_REF)}}-testing{{end}}
       # remove /merge suffix from the branch name. This is a workaround for the GitHub workflow on PRs,
       # where the branch name is suffixed with /merge. Prepend pr- to the branch name on PRs.
       IMAGE_VERSION: '{{regexReplaceAll "(\\d+)/merge" .GITHUB_REF_NAME "pr-${1}"}}'
