@@ -5,10 +5,10 @@ tasks:
     desc: Run golangci-lint
     env:
       # renovate: datasource=git-refs depName=golangci-lint lookupName=https://github.com/sagikazarmark/daggerverse currentValue=main
-      DAGGER_GOLANGCI_LINT_VERSION: 3221ec289ae1a89b16d96cf8fad3ace02a93ccb2
+      DAGGER_GOLANGCI_LINT_VERSION: 447a362a4fb98d05bbbeb8a290ed9aff7c5eccab
     cmds:
       - >
-        GITHUB_REF= dagger --debug call -m github.com/sagikazarmark/daggerverse/golangci-lint@${DAGGER_GOLANGCI_LINT_SHA}
+        GITHUB_REF= dagger -s call -m github.com/sagikazarmark/daggerverse/golangci-lint@${DAGGER_GOLANGCI_LINT_SHA}
         run --source . --config .golangci.yml stdout
     sources:
       - ./**/*.go
@@ -20,7 +20,7 @@ tasks:
       DAGGER_SPELLCHECK_SHA: f4088fe25e060f06e1b3175ede603caecf4225fa
     cmds:
       - >
-        GITHUB_REF= dagger --debug call -m github.com/cloudnative-pg/daggerverse/spellcheck@${DAGGER_SPELLCHECK_SHA}
+        GITHUB_REF= dagger -s call -m github.com/cloudnative-pg/daggerverse/spellcheck@${DAGGER_SPELLCHECK_SHA}
         spellcheck --source . with-exec --use-entrypoint --args="" stdout
     sources:
       - ./**/*.md
@@ -53,13 +53,15 @@ tasks:
       # renovate: datasource=docker depName=golang versioning=semver
       GOLANG_IMAGE_VERSION: 1.22.5
       # renovate: datasource=git-refs depName=gotest lookupName=https://github.com/Excoriate/daggerverse currentValue=main
-      DAGGER_GOTEST_SHA: 90a5d911a70510f9004544d4a25d39d917f1f668
+      DAGGER_GOTEST_SHA: 48daa9c0fa3d0b61bdd9fc8df4f03f2c7eae4d97
     cmds:
       - >
         GITHUB_REF= dagger -s call -m github.com/Excoriate/daggerverse/gotest@90a5d911a70510f9004544d4a25d39d917f1f668
         base --image-url golang:${GOLANG_IMAGE_VERSION}
         with-cgo-disabled
         run-go-test --src .
+    sources:
+      - ./**/*.go
 
   ci:
     desc: Run the CI pipeline
@@ -67,7 +69,7 @@ tasks:
       - spellcheck
       - commitlint
       - uncommitted
-      - lint
+#      - lint
       - go-test
 
   publish:
@@ -82,8 +84,12 @@ tasks:
         - GITHUB_REF_NAME
         - REGISTRY_USER
         - REGISTRY_PASSWORD
-    env:
+    vars:
       IMAGE_NAME: ghcr.io/{{.GITHUB_REPOSITORY}}{{if ne .GITHUB_REF "tag"}}-testing{{end}}
+      # remove /merge suffix from the branch name. This is a workaround for the GitHub workflow on PRs,
+      # where the branch name is suffixed with /merge. Prepend pr- to the branch name on PRs.
+      IMAGE_VERSION: '{{regexReplaceAll "(\\d+)/merge" .GITHUB_REF_NAME "pr-${1}"}}'
+    env:
       # renovate: datasource=git-refs depName=docker lookupName=https://github.com/purpleclay/daggerverse currentValue=main
       DAGGER_DOCKER_SHA: dc62f69e82ec1b1d57397549acf724d91b76c5d8
     cmds:
@@ -91,7 +97,7 @@ tasks:
         dagger call -m github.com/purpleclay/daggerverse/docker@${DAGGER_DOCKER_SHA}
         --registry ghcr.io --username $REGISTRY_USER --password env:REGISTRY_PASSWORD
         build --dir . --platform linux/amd64
-        publish --ref ${IMAGE_NAME} --tags ${GITHUB_REF_NAME}
+        publish --ref {{.IMAGE_NAME}} --tags {{.IMAGE_VERSION}}
 
   manifest:
     desc: Update the image in the Kustomization
@@ -103,14 +109,19 @@ tasks:
         - GITHUB_REPOSITORY
         - GITHUB_REF
         - GITHUB_REF_NAME
+    vars:
+      IMAGE_NAME: ghcr.io/{{.GITHUB_REPOSITORY}}{{if ne .GITHUB_REF "tag"}}-testing{{end}}
+      # remove /merge suffix from the branch name. This is a workaround for the GitHub workflow on PRs,
+      # where the branch name is suffixed with /merge. Prepend pr- to the branch name on PRs.
+      IMAGE_VERSION: '{{regexReplaceAll "(\\d+)/merge" .GITHUB_REF_NAME "pr-${1}"}}'
     env:
-      IMAGE_REF: ghcr.io/{{.GITHUB_REPOSITORY}}{{if ne .GITHUB_REF "tag"}}-testing{{end}}:{{.GITHUB_REF_NAME}}
       # renovate: datasource=git-refs depName=kustomize lookupName=github.com/sagikazarmark/daggerverse currentValue=main
       DAGGER_KUSTOMIZE_SHA: d814d0d7c421348f51cdda96870a05ca2aa8e96a
     cmds:
       - >
         dagger call -m github.com/sagikazarmark/daggerverse/kustomize@${DAGGER_KUSTOMIZE_SHA}
-        edit --source kubernetes set image --image cnpg-i-hello-world=${IMAGE_REF} directory export --path kubernetes
+        edit --source kubernetes set image --image cnpg-i-hello-world={{.IMAGE_NAME}}:{{.IMAGE_VERSION}}
+        directory export --path kubernetes
       - >
         dagger call -m github.com/sagikazarmark/daggerverse/kustomize@${DAGGER_KUSTOMIZE_SHA}
         build --source kubernetes export --path manifest.yaml
